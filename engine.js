@@ -15,6 +15,8 @@ const SAYAK={
  ancestor:base('Ancestor’s Rebuke',.34,.05,.43,14,0,{charge:1,spawn:'ancestor',frames:['x7',13,13]}),
  recall:base('Recall',.96,.01,.18,0,0,{frames:['x7','x7',0]}),
  throw:base('Last Orders',.14,.08,.43,13,90,{level:'throw',knock:.7,push:155,frames:['x4','x5','x6']}),
+ dash:base('Dash',.02,.16,.08,0,0,{travel:650,dash:true,frames:[3,2,0]}),
+ backdash:base('Backdash',.18,.01,.10,0,0,{backstep:600,dash:true,frames:[2,3,0]}),
  super:base('The Uncorking',.28,.11,.72,8,155,{meter:300,cinematic:true,frames:[13,13,6]})
 };
 const HUMAN={
@@ -27,6 +29,8 @@ const HUMAN={
  wolf:base('White Fang',.26,.05,.35,11,0,{spawn:'wolf',cool:2.6,frames:[12,12,0]}),
  transform:base('Hyena Avatar',.35,.01,.24,0,0,{meter:100,frames:[13,13,13]}),
  throw:base('Wrong Turn',.13,.08,.40,12,84,{level:'throw',knock:.65,switch:true,frames:[4,6,10]}),
+ dash:base('Dash',.02,.16,.08,0,0,{travel:760,dash:true,frames:[3,2,0]}),
+ backdash:base('Backdash',.18,.01,.10,0,0,{backstep:620,dash:true,frames:[2,3,0]}),
  super:base('Midnight Hunt',.28,.12,.72,7,145,{meter:300,cinematic:true,travel:340,frames:[13,13,13]})
 };
 const BEAST={
@@ -38,10 +42,12 @@ const BEAST={
  pounce:base('Carrion Pounce',.25,.22,.38,13,150,{level:'overhead',pounce:true,frames:[14,12,14]}),
  reversal:base('Cackling Reversal',.27,.10,.32,12,148,{backstep:140,evade:true,frames:[9,5,6]}),
  throw:base('Jawbreaker',.16,.10,.51,17,88,{level:'throw',knock:.8,push:100,frames:[4,7,8]}),
+ dash:base('Dash',.02,.16,.08,0,0,{travel:880,dash:true,frames:[3,2,0]}),
+ backdash:base('Backdash',.18,.01,.10,0,0,{backstep:650,dash:true,frames:[2,3,0]}),
  super:base('Midnight Hunt',.28,.12,.72,7,150,{meter:300,cinematic:true,travel:340,frames:[4,13,6]})
 };
 function table(f){return f.kind==='sayak'?SAYAK:f.form>0?BEAST:HUMAN;}
-function makeFighter(kind,x,dir){return {kind,x,dir,y:0,vy:0,hp:100,meter:100,charges:3,form:0,wins:0,action:null,stun:0,down:0,guard:false,crouch:false,walk:0,moving:0,cool:0,flash:0,combo:0,comboTime:0,lastMove:'',labelTime:0,aiWait:0,throwSafe:0,buffer:null,vx:0,aiSeen:null,aiReact:0,aiPlan:null,aiHold:0,aiHoldDown:false,aiMove:null};}
+function makeFighter(kind,x,dir){return {kind,x,dir,y:0,vy:0,hp:100,meter:100,charges:3,form:0,wins:0,action:null,stun:0,down:0,guard:false,crouch:false,walk:0,moving:0,cool:0,flash:0,combo:0,comboTime:0,lastMove:'',labelTime:0,aiWait:0,throwSafe:0,buffer:null,vx:0,aiSeen:null,aiReact:0,aiPlan:null,aiHold:0,aiHoldDown:false,aiMove:null,lastAxis:0,tapDir:0,tapTime:-9,hitstun:false,juggle:false};}
 class Game{
  constructor(){this.events=[];this.mode='ai';this.difficulty=1;this.infinite=true;this.dummy='idle';this.state='menu';this.time=0;this.reset('sayak','ai');this.state='menu';}
  reset(selected='sayak',mode='ai'){this.selected=selected;this.mode=mode;this.round=1;this.fighters=[makeFighter(selected,390,1),makeFighter(selected==='sayak'?'tabaaqui':'sayak',890,-1)];this.state='fight';this.nextRound(true);}
@@ -50,12 +56,13 @@ class Game{
  drain(){return this.events.splice(0);}
  trainingReset(){const selected=this.selected;this.reset(selected,'training');this.intro=0;}
  request(i,key){const f=this.fighters[i];if(this.state==='fight'&&this.intro>0&&this.intro<.3&&f&&table(f)[key]){f.buffer={key,time:.14};return false;}if(this.state!=='fight'||this.intro>0||this.roundEnd||this.cinematic||!f||f.hp<=0)return false;const moves=table(f),m=moves[key];if(!m)return false;
- if(f.action){const a=f.action;if(a.key==='feint'&&a.t>.10&&['sweep','overhead'].includes(key)){f.action=null;}else if(a.hit&&a.t>=a.m.start&&a.m.cancel?.includes(key)){f.action=null;}else{f.buffer={key,time:.14};return false;}}
+ if(f.action){const a=f.action;if(a.m.dash&&!m.dash&&a.t>=.10){f.action=null;}else if(a.key==='feint'&&a.t>.10&&['sweep','overhead'].includes(key)){f.action=null;}else if(a.hit&&a.t>=a.m.start&&a.m.cancel?.includes(key)){f.action=null;}else{f.buffer={key,time:.14};return false;}}
  if(f.stun>0||f.down>0)return false;if(f.y<0&&!['light','heavy','overhead'].includes(key))return false;
  if(m.charge&&(f.charges<m.charge||this.projectiles.some(p=>p.owner===i&&p.type!=='wolf')||this.zones.some(p=>p.owner===i))){this.emit('notice',{i,text:f.charges<m.charge?'BOTTLE EMPTY · U TO RECALL':'SPIRIT STILL ACTIVE'});return false;}
  if(m.meter&&f.meter<m.meter){this.emit('notice',{i,text:`NEEDS ${m.meter/100} STOCK${m.meter>100?'S':''}`});return false;}if(m.cool&&f.cool>0)return false;if(key==='recall'&&f.charges===3){this.emit('notice',{i,text:'BOTTLE FULL'});return false;}
  f.charges-=m.charge||0;f.meter-=m.meter||0;if(m.cool)f.cool=m.cool;f.action={key,m,t:0,done:false,hit:false,dir:f.dir};f.guard=false;f.lastMove=m.name;f.labelTime=1.3;f.buffer=null;this.emit('move',{i,key});return true;}
- control(f,input,dt){if(f.stun>0||f.down>0||f.action){f.guard=false;return;}const axis=(input.right?1:0)-(input.left?1:0);f.crouch=!!input.down&&f.y===0;f.guard=f.y===0&&(!!input.guard||(axis===-f.dir));f.moving=0;if(input.jump&&f.y===0){f.vy=-800;f.y=-1;f.guard=false;this.emit('jump',{x:f.x});}if(!f.crouch&&axis){let speed=f.kind==='sayak'?250:f.form?330:290;f.x+=axis*speed*dt*(f.guard?.72:1);f.moving=axis;f.walk+=dt;}}
+ control(f,input,dt,i){const tap=(input.right?1:0)-(input.left?1:0);if(!input.ai&&tap&&!f.lastAxis){if(f.tapDir===tap&&this.time-f.tapTime<.25){f.tapDir=0;this.request(i,tap===f.dir?'dash':'backdash');}else{f.tapDir=tap;f.tapTime=this.time;}}f.lastAxis=tap;
+ if(f.stun>0||f.down>0||f.action){f.guard=false;return;}const axis=(input.right?1:0)-(input.left?1:0);f.crouch=!!input.down&&f.y===0;f.guard=f.y===0&&(!!input.guard||(axis===-f.dir));f.moving=0;if(input.jump&&f.y===0){f.vy=-800;f.y=-1;f.guard=false;this.emit('jump',{x:f.x});}if(!f.crouch&&axis){let speed=f.kind==='sayak'?250:f.form?330:290;f.x+=axis*speed*dt*(f.guard?.72:1);f.moving=axis;f.walk+=dt;}}
  // Effective forward reach of a melee move, including any travel during startup/active.
  reach(m){return m.range?m.range+(m.travel||0)*(m.start+m.active)-(m.backstep||0)*m.start:0;}
  ai(i,dt){const f=this.fighters[i],o=this.fighters[1-i],d=Math.abs(f.x-o.x),lvl=this.difficulty,fwd=f.dir===1?'right':'left',back=f.dir===1?'left':'right';f.aiWait-=dt;f.aiHold=Math.max(0,f.aiHold-dt);let input={};if(this.mode==='training'){input.guard=this.dummy==='guard';input.down=this.dummy==='low';input.guard ||= input.down;return input;}
@@ -84,6 +91,8 @@ class Game{
   else if(f.kind!=='sayak'&&!f.form&&f.meter>=100&&d>220&&Math.random()<.5)key='transform';
   else if(f.kind!=='sayak'&&!f.form&&d>240&&!f.cool&&Math.random()<.5)key='wolf';
   else if(f.form&&d>200&&d<330&&Math.random()<.4)key='pounce';
+  else if(d>270&&Math.random()<.3+.15*lvl)key='dash';
+  else if(d<95&&o.action&&Math.random()<.15)key='backdash';
   else if(d<88&&o.guard&&Math.random()<.6)key='throw';
   else if(inRange.length&&Math.random()<.5+.15*lvl)key=inRange[Math.floor(Math.random()*inRange.length)];
   else if(inRange.length&&Math.random()<.5){f.aiHold=.3+Math.random()*.35;f.aiHoldDown=Math.random()<.35;}
@@ -95,7 +104,7 @@ class Game{
  if(m.level==='throw'&&air)return false;if(o.action?.m.evade&&o.action.t<o.action.m.start&&m.level==='mid'&&!opts.projectile){if(f.action)f.action.connected=true;this.emit('notice',{i:j,text:'EVADE'});return false;}
  const front=(origin-o.x)*o.dir>=-10;const blocked=m.level!=='throw'&&o.guard&&!air&&front&&(m.level==='mid'||m.level==='low'&&o.crouch||m.level==='overhead'&&!o.crouch);
  if(m.level==='throw'&&o.action?.key==='throw'&&o.action.t<.2&&f.form<=0&&o.form<=0){o.action=null;f.action=null;f.x-=f.dir*45;o.x+=f.dir*45;this.emit('notice',{i,text:'THROW BREAK'});return false;}
- const amount=blocked?Math.max(.5,m.damage*.08):m.damage;const hurtDir=Math.sign(o.x-origin)||f.dir;o.hp=Math.max(0,o.hp-amount);o.stun=blocked?.16:m.stun||.3;o.flash=.13;o.action=null;o.buffer=null;if(!blocked){o.guard=false;o.crouch=false;f.combo=f.comboTime>0?f.combo+1:1;f.comboTime=.95;if(m.knock){o.down=m.knock;o.vy=-180;}if(m.launch){o.vy=-m.launch;o.y=Math.min(o.y,-1);}if(m.switch){const ox=o.x;o.x=f.x-f.dir*60;f.x=ox;}}
+ const comboing=(o.stun>0&&o.hitstun)||o.juggle,hitNo=blocked?f.combo:comboing&&f.comboTime>0?f.combo+1:1,amount=blocked?Math.max(.5,m.damage*.08):m.damage*Math.max(.3,1-.1*(hitNo-1));const hurtDir=Math.sign(o.x-origin)||f.dir;o.hp=Math.max(0,o.hp-amount);o.stun=blocked?.16:m.stun||.3;o.hitstun=!blocked;o.flash=.13;o.action=null;o.buffer=null;if(!blocked){o.guard=false;o.crouch=false;f.combo=hitNo;f.comboTime=.95;if(m.knock){o.down=m.knock;o.vy=-180;}if(m.launch){o.vy=-m.launch;o.y=Math.min(o.y,-1);o.juggle=true;}if(m.switch){const ox=o.x;o.x=f.x-f.dir*60;f.x=ox;}}
  // Knockback slides (decaying velocity) instead of teleporting; at the wall the attacker is pushed back instead.
  const pushDir=m.switch&&!blocked?(Math.sign(o.x-f.x)||-f.dir):hurtDir,dist=blocked?22:m.push||30,room=pushDir>0?WIDTH-85-o.x:o.x-85;o.vx=pushDir*dist*KNOCK_DECAY;if(!opts.projectile&&dist>room)f.vx=-pushDir*(dist-Math.max(0,room))*KNOCK_DECAY;
  // Transformed Tabaaqui cannot replenish meter until he returns to human form.
@@ -121,12 +130,12 @@ class Game{
  if(this.cinematic){const c=this.cinematic,f=this.fighters[c.owner],o=this.fighters[1-c.owner];c.age+=dt;const tick=Math.min(4,Math.floor(c.age/.28));if(tick>c.tick){c.tick=tick;o.hp=Math.max(0,o.hp-(tick===4?10:5));this.emit('hit',{x:o.x,y:FLOOR-125,kind:f.kind,damage:5,blocked:false});f.combo++;}if(c.age>1.4){this.cinematic=null;o.stun=.3;o.down=.6;o.vy=-170;o.x+=f.dir*85;this.checkEnd();}return;}
  if(this.mode!=='training')this.clock=Math.max(0,this.clock-dt);
  for(let i=0;i<2;i++){const f=this.fighters[i],o=this.fighters[1-i];f.dir=o.x>=f.x?1:-1;f.stun=Math.max(0,f.stun-dt);f.down=Math.max(0,f.down-dt);f.throwSafe=Math.max(0,f.throwSafe-dt);f.cool=Math.max(0,f.cool-dt);f.flash=Math.max(0,f.flash-dt);f.labelTime=Math.max(0,f.labelTime-dt);f.comboTime=Math.max(0,f.comboTime-dt);if(!f.comboTime)f.combo=0;if(f.form>0){f.form=Math.max(0,f.form-dt);if(!f.form)this.emit('revert',{x:f.x});}
- if(this.mode==='training'&&this.infinite){f.meter=300;f.charges=3;}const input=i===1&&this.mode!=='local'?this.ai(i,dt):inputs[i]||{};this.control(f,input,dt);
+ if(this.mode==='training'&&this.infinite){f.meter=300;f.charges=3;}const fromAI=i===1&&this.mode!=='local',input=fromAI?{...this.ai(i,dt),ai:true}:inputs[i]||{};this.control(f,input,dt,i);
  if(f.action){const a=f.action,m=a.m; a.t+=dt;if(m.backstep&&a.t<m.start)f.x-=a.dir*m.backstep*dt;if(m.travel&&a.t<m.start+m.active)f.x+=a.dir*m.travel*dt;
  if(m.pounce&&a.t>=m.start*.5&&!a.leapt){a.leapt=true;f.vy=-470;f.y=-1;}if(m.pounce&&a.leapt)f.x+=a.dir*340*dt;
  if(a.t>=m.start&&!a.done){a.done=true;this.activate(i,a);}else if(a.done&&!a.connected&&m.damage&&!m.spawn&&a.t<m.start+m.active)this.strike(i,a);
  if(f.action===a&&a.t>=m.start+m.active+m.recovery)f.action=null;}
- if(f.y<0||f.vy){f.y+=f.vy*dt;f.vy+=2300*dt;if(f.y>=0){f.y=0;f.vy=0;f.throwSafe=.12;this.emit('land',{x:f.x});}}if(f.buffer){f.buffer.time-=dt;if(f.buffer.time<=0)f.buffer=null;else if(!f.action&&!f.stun&&!f.down){const key=f.buffer.key;f.buffer=null;this.request(i,key);}}
+ if(f.y<0||f.vy){f.y+=f.vy*dt;f.vy+=2300*dt;if(f.y>=0){f.y=0;f.vy=0;f.throwSafe=.12;f.juggle=false;this.emit('land',{x:f.x});}}if(f.buffer){f.buffer.time-=dt;if(f.buffer.time<=0)f.buffer=null;else if(!f.action&&!f.stun&&!f.down){const key=f.buffer.key;f.buffer=null;this.request(i,key);}}
  if(f.vx){f.x+=f.vx*dt;f.vx*=Math.exp(-KNOCK_DECAY*dt);if(Math.abs(f.vx)<4)f.vx=0;}
  f.x=Math.max(85,Math.min(WIDTH-85,f.x));}
  let [a,b]=this.fighters;if(Math.abs(a.x-b.x)<78&&Math.abs(a.y-b.y)<145){const dir=a.x<=b.x?1:-1,mid=(a.x+b.x)/2;a.x=Math.max(85,Math.min(WIDTH-85,mid-dir*39));b.x=Math.max(85,Math.min(WIDTH-85,mid+dir*39));}
