@@ -46,20 +46,44 @@ const BEAST={
  backdash:base('Backdash',.18,.01,.10,0,0,{backstep:650,dash:true,frames:[2,3,0]}),
  super:base('Midnight Hunt',.28,.12,.72,7,150,{meter:300,cinematic:true,travel:340,frames:[4,13,6]})
 };
-function table(f){return f.kind==='sayak'?SAYAK:f.form>0?BEAST:HUMAN;}
-function makeFighter(kind,x,dir){return {kind,x,dir,y:0,vy:0,hp:100,meter:100,charges:3,form:0,wins:0,action:null,stun:0,down:0,guard:false,crouch:false,walk:0,moving:0,cool:0,flash:0,combo:0,comboTime:0,lastMove:'',labelTime:0,aiWait:0,throwSafe:0,buffer:null,vx:0,aiSeen:null,aiReact:0,aiPlan:null,aiHold:0,aiHoldDown:false,aiMove:null,lastAxis:0,tapDir:0,tapTime:-9,hitstun:false,juggle:false};}
+const KI={
+ light:base('Sun Knuckle',.075,.07,.16,5,100,{frames:[4,5,4],cancel:['heavy','sweep','blast']}),
+ heavy:base('Horizon Kick',.19,.11,.30,11,155,{frames:[4,6,0],cancel:['blast']}),
+ sweep:base('Ember Sweep',.16,.10,.29,7,135,{level:'low',knock:.5,frames:[10,10,0]}),
+ overhead:base('Falling Sun',.30,.12,.34,12,132,{level:'overhead',frames:[14,7,0]}),
+ palm:base('Sunstep Palm',.17,.12,.32,10,125,{travel:260,push:90,frames:[4,8,0]}),
+ rise:base('Dawn Ascendant',.15,.17,.45,13,120,{airHit:true,launch:330,frames:[4,9,0]}),
+ blast:base('Dawn Bolt',.25,.05,.30,10,0,{meter:25,cool:.65,spawn:'ki',frames:[4,'k2',0]}),
+ lowblast:base('Skimming Sun',.32,.05,.37,8,0,{meter:35,cool:.8,spawn:'ki-low',level:'low',frames:[10,10,10]}),
+ focus:base('Stillpoint Breath',1.05,.01,.24,0,0,{frames:[1,1,0]}),
+ throw:base('Orbit Breaker',.14,.08,.43,13,86,{level:'throw',knock:.7,push:120,frames:[4,8,0]}),
+ dash:base('Sunstep',.02,.16,.08,0,0,{travel:740,dash:true,frames:[3,2,0]}),
+ backdash:base('Ember Retreat',.18,.01,.10,0,0,{backstep:620,dash:true,frames:[2,3,0]}),
+ super:base('Solar Breaker',.72,.65,.60,8,760,{meter:300,spawn:'solar',push:24,stun:.24,frames:['k0','k2','k3']})
+};
+const characters=new Map([
+ ['sayak',{id:'sayak',name:'Sayak',title:'Keeper of the Unquiet',kind:'sayak',builtin:true}],
+ ['tabaaqui',{id:'tabaaqui',name:'Tabaaqui',title:'The Laughing Fang',formName:'Hyena Avatar',kind:'tabaaqui',builtin:true}],
+ ['geeks',{id:'geeks',name:'Geeks',title:'The Living Sun',kind:'ki',builtin:true,artKeys:{martial:'geeks-martial','martial-extra':'geeks-martial-extra',effects:'geeks-effects'}}]
+]);
+function character(id){return characters.get(typeof id==='string'?id:id.characterId||id.kind)||characters.get('sayak');}
+function registerCharacter(def){if(!def||characters.get(def.id)?.builtin)throw Error('Cannot replace a built-in character');characters.set(def.id,def);}
+function unregisterCharacter(id){if(characters.get(id)?.builtin)throw Error('Cannot remove a built-in character');characters.delete(id);}
+function table(f){const d=character(f);return d.moveSets?(f.form>0?d.moveSets.beast:d.moveSets.base):f.kind==='ki'?KI:f.kind==='sayak'?SAYAK:f.form>0?BEAST:HUMAN;}
+function makeFighter(id,x,dir){const def=character(id),kind=def.kind;return {characterId:def.id,kind,x,dir,y:0,vy:0,hp:100,meter:100,charges:3,form:0,wins:0,action:null,stun:0,down:0,guard:false,crouch:false,walk:0,moving:0,cool:0,flash:0,combo:0,comboTime:0,lastMove:'',labelTime:0,aiWait:0,throwSafe:0,buffer:null,vx:0,aiSeen:null,aiReact:0,aiPlan:null,aiHold:0,aiHoldDown:false,aiMove:null,lastAxis:0,tapDir:0,tapTime:-9,hitstun:false,juggle:false};}
 class Game{
  constructor(){this.events=[];this.mode='ai';this.difficulty=1;this.infinite=true;this.dummy='idle';this.state='menu';this.time=0;this.reset('sayak','ai');this.state='menu';}
- reset(selected='sayak',mode='ai'){this.selected=selected;this.mode=mode;this.round=1;this.fighters=[makeFighter(selected,390,1),makeFighter(selected==='sayak'?'tabaaqui':'sayak',890,-1)];this.state='fight';this.nextRound(true);}
- nextRound(first=false){if(!first)this.fighters=this.fighters.map((f,i)=>Object.assign(makeFighter(f.kind,i?890:390,i?-1:1),{wins:f.wins}));this.clock=90;this.projectiles=[];this.zones=[];this.cinematic=null;this.hitstop=0;this.intro=this.mode==='training'?.35:1.1;this.roundEnd=0;this.winner='';this.events=[];}
+ reset(selected='sayak',mode='ai',opponent=null){this.selected=selected;this.opponent=opponent|| (character(selected).kind==='sayak'?'tabaaqui':'sayak');this.mode=mode;this.round=1;this.fighters=[makeFighter(selected,390,1),makeFighter(this.opponent,890,-1)];this.state='fight';this.nextRound(true);}
+ nextRound(first=false){if(!first)this.fighters=this.fighters.map((f,i)=>Object.assign(makeFighter(f.characterId||f.kind,i?890:390,i?-1:1),{wins:f.wins}));this.clock=90;this.beams=[];this.projectiles=[];this.zones=[];this.cinematic=null;this.hitstop=0;this.intro=this.mode==='training'?.35:1.1;this.roundEnd=0;this.winner='';this.events=[];}
  emit(type,data={}){this.events.push({type,...data});}
  drain(){return this.events.splice(0);}
- trainingReset(){const selected=this.selected;this.reset(selected,'training');this.intro=0;}
+ trainingReset(){const selected=this.selected;this.reset(selected,'training',this.opponent);this.intro=0;}
  request(i,key){const f=this.fighters[i];if(this.state==='fight'&&this.intro>0&&this.intro<.3&&f&&table(f)[key]){f.buffer={key,time:.14};return false;}if(this.state!=='fight'||this.intro>0||this.roundEnd||this.cinematic||!f||f.hp<=0)return false;const moves=table(f),m=moves[key];if(!m)return false;
  if(f.action){const a=f.action;if(a.m.dash&&!m.dash&&a.t>=.10){f.action=null;}else if(a.key==='feint'&&a.t>.10&&['sweep','overhead'].includes(key)){f.action=null;}else if(a.hit&&a.t>=a.m.start&&a.m.cancel?.includes(key)){f.action=null;}else{f.buffer={key,time:.14};return false;}}
  if(f.stun>0||f.down>0)return false;if(f.y<0&&!['light','heavy','overhead'].includes(key))return false;
- if(m.charge&&(f.charges<m.charge||this.projectiles.some(p=>p.owner===i&&p.type!=='wolf')||this.zones.some(p=>p.owner===i))){this.emit('notice',{i,text:f.charges<m.charge?'BOTTLE EMPTY · U TO RECALL':'SPIRIT STILL ACTIVE'});return false;}
- if(m.meter&&f.meter<m.meter){this.emit('notice',{i,text:`NEEDS ${m.meter/100} STOCK${m.meter>100?'S':''}`});return false;}if(m.cool&&f.cool>0)return false;if(key==='recall'&&f.charges===3){this.emit('notice',{i,text:'BOTTLE FULL'});return false;}
+ if(m.charge&&(f.charges<m.charge||this.projectiles.some(p=>p.owner===i&&p.type!=='wolf')||this.zones.some(p=>p.owner===i))){this.emit('notice',{i,text:f.charges<m.charge?'BOTTLE EMPTY · I TO RECALL':'SPIRIT STILL ACTIVE'});return false;}
+ // Focus remains available at full ki so its animation also works in unlimited training.
+ if(m.meter&&f.meter<m.meter){this.emit('notice',{i,text:f.kind==='ki'?`NEEDS ${m.meter} KI`:`NEEDS ${m.meter/100} STOCK${m.meter>100?'S':''}`});return false;}if(m.cool&&f.cool>0)return false;if(key==='recall'&&f.charges===3){this.emit('notice',{i,text:'BOTTLE FULL'});return false;}
  f.charges-=m.charge||0;f.meter-=m.meter||0;if(m.cool)f.cool=m.cool;f.action={key,m,t:0,done:false,hit:false,dir:f.dir};f.guard=false;f.lastMove=m.name;f.labelTime=1.3;f.buffer=null;this.emit('move',{i,key});return true;}
  control(f,input,dt,i){const tap=(input.right?1:0)-(input.left?1:0);if(!input.ai&&tap&&!f.lastAxis){if(f.tapDir===tap&&this.time-f.tapTime<.25){f.tapDir=0;this.request(i,tap===f.dir?'dash':'backdash');}else{f.tapDir=tap;f.tapTime=this.time;}}f.lastAxis=tap;
  if(f.stun>0||f.down>0||f.action){f.guard=false;return;}const axis=(input.right?1:0)-(input.left?1:0);f.crouch=!!input.down&&f.y===0;f.guard=f.y===0&&(!!input.guard||(axis===-f.dir));f.moving=0;if(input.jump&&f.y===0){f.vy=-800;f.y=-1;f.guard=false;this.emit('jump',{x:f.x});}if(!f.crouch&&axis){let speed=f.kind==='sayak'?250:f.form?330:290;f.x+=axis*speed*dt*(f.guard?.72:1);f.moving=axis;f.walk+=dt;}}
@@ -84,14 +108,17 @@ class Game{
  if(f.aiHold>0&&!busy&&d<200){input.guard=true;input.down=f.aiHoldDown;return input;}
  // Think: pick one plan per tick based on distance instead of rerolling every frame.
  if(f.aiWait<=0&&!busy){f.aiWait=(.18+Math.random()*.32)/lvl;f.aiMove=null;let key;
-  const list=f.kind==='sayak'?['light','heavy','sweep','shield','overhead']:!f.form?['light','heavy','sweep','overhead','step']:['light','heavy','rush','sweep','reversal'];
+  const list=f.kind==='ki'?['light','heavy','sweep','overhead','palm','rise']:f.kind==='sayak'?['light','heavy','sweep','shield','overhead']:!f.form?['light','heavy','sweep','overhead','step']:['light','heavy','rush','sweep','reversal'];
   const inRange=list.filter(k=>moves[k]&&this.reaches(f,o,moves[k],d)),best=Math.max(...list.map(k=>this.reach(moves[k])));
-  if(f.meter>=300&&d<this.reach(moves.super)-10)key='super';
+  if(f.meter>=300&&(f.kind==='ki'?d>180&&d<650:d<this.reach(moves.super)-10))key='super';
+  else if(f.kind==='ki'&&f.meter<35&&d>260)key='focus';
+  else if(f.kind==='ki'&&o.y<-45&&d<160)key='rise';
+  else if(f.kind==='ki'&&d>220&&!f.cool&&f.meter>=25)key='blast';
   else if(f.kind==='sayak'&&!f.charges&&d>260)key='recall';
   else if(f.kind==='sayak'&&o.y<-45&&d<170)key='rise';
   else if(f.kind==='sayak'&&d>230&&f.charges&&Math.random()<.55)key=Math.random()<.4?'grasp':'wisp';
-  else if(f.kind!=='sayak'&&!f.form&&f.meter>=100&&d>220&&Math.random()<.5)key='transform';
-  else if(f.kind!=='sayak'&&!f.form&&d>240&&!f.cool&&Math.random()<.5)key='wolf';
+  else if(f.kind==='tabaaqui'&&!f.form&&f.meter>=100&&d>220&&Math.random()<.5)key='transform';
+  else if(f.kind==='tabaaqui'&&!f.form&&d>240&&!f.cool&&Math.random()<.5)key='wolf';
   else if(f.form&&d>200&&d<330&&Math.random()<.4)key='pounce';
   else if(d>270&&Math.random()<.3+.15*lvl)key='dash';
   else if(d<95&&o.action&&Math.random()<.15)key='backdash';
@@ -115,6 +142,9 @@ class Game{
  this.zones=this.zones.filter(z=>z.owner!==j||z.age>=z.delay);this.emit('hit',{x:o.x,y:FLOOR+o.y-(o.crouch?65:135),blocked,kind:f.kind,damage:amount,level:m.level});return !blocked;}
  melee(i,m){const f=this.fighters[i],o=this.fighters[1-i],dx=(o.x-f.x)*f.action.dir;let vertical=Math.abs(o.y-f.y)<(m.airHit?220:135);if(m.level==='low')vertical=o.y>-40;if(dx>=-25&&dx<m.range&&vertical)return this.contact(i,1-i,m,f.x);return false;}
  activate(i,a){const f=this.fighters[i],o=this.fighters[1-i],m=a.m;
+ if(a.key==='focus'){f.meter=Math.min(300,f.meter+70);this.emit('focus',{x:f.x});return;}
+ if(m.spawn==='solar'){this.beams.push({owner:i,dir:a.dir,x:f.x+a.dir*123,y:FLOOR-158,age:0,life:.65,ticks:0,m,action:a});this.emit('beam',{x:f.x,i});return;}
+ if(['ki','ki-low'].includes(m.spawn)){this.projectiles.push({type:m.spawn,owner:i,x:f.x+a.dir*123,y:FLOOR+f.y-(m.spawn==='ki-low'?35:158),vx:a.dir*(m.spawn==='solar'?760:510),dir:a.dir,life:2.7,age:0,m});return;}
  if(a.key==='recall'){f.charges=Math.min(3,f.charges+1);this.emit('recall',{x:f.x});return;}
  if(a.key==='transform'){f.form=8;this.emit('transform',{x:f.x});return;}
  if(m.spawn==='wisp'){this.projectiles.push({type:'wisp',owner:i,x:f.x+a.dir*75,y:FLOOR+f.y-140,vx:a.dir*420,dir:a.dir,life:2.7,age:0,m});return;}
@@ -141,14 +171,16 @@ class Game{
  if(f.vx){f.x+=f.vx*dt;f.vx*=Math.exp(-KNOCK_DECAY*dt);if(Math.abs(f.vx)<4)f.vx=0;}
  f.x=Math.max(85,Math.min(WIDTH-85,f.x));}
  let [a,b]=this.fighters;if(Math.abs(a.x-b.x)<78&&Math.abs(a.y-b.y)<145){const dir=a.x<=b.x?1:-1,mid=(a.x+b.x)/2;a.x=Math.max(85,Math.min(WIDTH-85,mid-dir*39));b.x=Math.max(85,Math.min(WIDTH-85,mid+dir*39));}
- for(const p of this.projectiles){p.age+=dt;p.life-=dt;p.x+=p.vx*dt;const o=this.fighters[1-p.owner];const target=FLOOR+o.y-(o.crouch?70:125);if(Math.abs(p.x-o.x)<48&&Math.abs(p.y-target)<(p.type==='wolf'?108:105)){this.contact(p.owner,1-p.owner,p.m,p.x,{projectile:true});p.life=0;}}
+ for(const p of this.projectiles){p.age+=dt;p.life-=dt;p.x+=p.vx*dt;const o=this.fighters[1-p.owner];const target=FLOOR+o.y-(o.crouch?70:125);if(Math.abs(p.x-o.x)<(p.type==='ki'?64:48)&&Math.abs(p.y-target)<(p.type==='wolf'||p.type==='ki-low'?108:p.type==='solar'?145:105)){this.contact(p.owner,1-p.owner,p.m,p.x,{projectile:true});p.life=0;}}
+ for(const beam of this.beams){const f=this.fighters[beam.owner],o=this.fighters[1-beam.owner];if(f.action!==beam.action){beam.life=0;continue;}beam.age+=dt;beam.life-=dt;const tick=Math.min(4,1+Math.floor(beam.age/.16));if(tick>beam.ticks){beam.ticks=tick;const dx=(o.x-beam.x)*beam.dir;if(dx>=-45&&dx<beam.m.range&&Math.abs(FLOOR+o.y-125-beam.y)<90){if(beam.blocked&&o.stun>0&&!o.hitstun)o.guard=true;beam.blocked=o.guard;this.contact(beam.owner,1-beam.owner,{...beam.m,knock:tick===4?.6:0},f.x,{projectile:true});}}}this.beams=this.beams.filter(b=>b.life>0);
  this.projectiles=this.projectiles.filter(p=>p.life>0&&p.x>-150&&p.x<WIDTH+150);
  for(const z of this.zones){z.age+=dt;if(z.age>=z.delay&&!z.done){z.done=true;const o=this.fighters[1-z.owner];if(Math.abs(o.x-z.x)<(z.type==='grasp'?70:110)&&(z.type==='ancestor'?o.y>-270:o.y>-45))this.contact(z.owner,1-z.owner,z.m,z.x,{projectile:true});}}
  this.zones=this.zones.filter(z=>z.age<z.life);if(this.mode==='training'){for(const f of this.fighters)if(f.hp<100&&!f.stun&&!f.down&&!f.action&&f.comboTime<=0)f.hp=Math.min(100,f.hp+dt*22);}this.checkEnd();}
- checkEnd(){if(this.mode==='training'){for(const f of this.fighters)f.hp=Math.max(1,f.hp);return;}const [a,b]=this.fighters;if(a.hp<=0||b.hp<=0||this.clock<=0){if(Math.abs(a.hp-b.hp)<.01)this.winner='DRAW';else{const win=a.hp>b.hp?a:b;win.wins++;this.winner=win.kind.toUpperCase()+' WINS';}this.roundEnd=2.3;this.emit('roundEnd',{winner:this.winner});}}
- demo(key){if(this.mode!=='training')return false;const f=this.fighters[0],o=this.fighters[1];f.action=null;f.stun=0;f.down=0;f.y=0;f.vy=0;f.meter=300;f.charges=key==='recall'?2:3;f.cool=0;f.combo=0;f.comboTime=0;f.x=450;f.dir=1;o.x=['recall','transform','feint'].includes(key)?850:['grasp','wisp','wolf'].includes(key)?690:key==='throw'||key==='light'?530:575;o.dir=-1;o.hp=100;o.stun=0;o.down=0;o.y=0;o.vy=0;o.action=null;this.projectiles=[];this.zones=[];this.cinematic=null;this.hitstop=0;this.intro=0;return this.request(0,key);}
- snapshot(){return {state:this.state,mode:this.mode,round:this.round,clock:this.clock,fighters:this.fighters.map(f=>({kind:f.kind,hp:f.hp,meter:f.meter,charges:f.charges,form:f.form,x:f.x,y:f.y,guard:f.guard,crouch:f.crouch,wins:f.wins,action:f.action?.key||null})),projectiles:this.projectiles.length,zones:this.zones.length};}
+ checkEnd(){if(this.mode==='training'){for(const f of this.fighters)f.hp=Math.max(1,f.hp);return;}const [a,b]=this.fighters;if(a.hp<=0||b.hp<=0||this.clock<=0){if(Math.abs(a.hp-b.hp)<.01)this.winner='DRAW';else{const win=a.hp>b.hp?a:b;win.wins++;this.winner=character(win).name.toUpperCase()+' WINS';}this.roundEnd=2.3;this.emit('roundEnd',{winner:this.winner});}}
+ demo(key){if(this.mode!=='training')return false;const f=this.fighters[0],o=this.fighters[1];f.action=null;f.stun=0;f.down=0;f.y=0;f.vy=0;f.meter=key==='focus'?200:300;f.charges=key==='recall'?2:3;f.cool=0;f.combo=0;f.comboTime=0;f.x=450;f.dir=1;o.x=['recall','transform','feint','focus'].includes(key)?850:['grasp','wisp','wolf','blast','lowblast','super'].includes(key)&&f.kind==='ki'||['grasp','wisp','wolf'].includes(key)?690:key==='throw'||key==='light'?530:575;o.dir=-1;o.hp=100;o.stun=0;o.down=0;o.y=0;o.vy=0;o.action=null;this.beams=[];this.projectiles=[];this.zones=[];this.cinematic=null;this.hitstop=0;this.intro=0;return this.request(0,key);}
+ snapshot(){return {state:this.state,mode:this.mode,round:this.round,clock:this.clock,fighters:this.fighters.map(f=>({characterId:f.characterId,name:character(f).name,kind:f.kind,hp:f.hp,meter:f.meter,charges:f.charges,form:f.form,x:f.x,y:f.y,guard:f.guard,crouch:f.crouch,wins:f.wins,action:f.action?.key||null})),projectiles:this.projectiles.length,zones:this.zones.length};}
 }
-const API={Game,SAYAK,HUMAN,BEAST,table,STEP,WIDTH,FLOOR};if(typeof module!=='undefined')module.exports=API;root.FightEngine=API;
+const API={Game,SAYAK,HUMAN,BEAST,KI,table,STEP,WIDTH,FLOOR,characters,character,registerCharacter,unregisterCharacter,makeFighter};if(typeof module!=='undefined')module.exports=API;root.FightEngine=API;
 })(typeof window!=='undefined'?window:globalThis);
+
 
